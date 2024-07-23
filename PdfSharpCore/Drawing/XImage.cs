@@ -36,7 +36,7 @@ using MigraDocCore.DocumentObjectModel.MigraDoc.DocumentObjectModel.Shapes;
 using PdfSharpCore.Pdf.IO.enums;
 using static MigraDocCore.DocumentObjectModel.MigraDoc.DocumentObjectModel.Shapes.ImageSource;
 using PdfSharpCore.Utils;
-using SixLabors.ImageSharp.PixelFormats;
+using ImageMagick;
 
 namespace PdfSharpCore.Drawing
 {
@@ -44,7 +44,6 @@ namespace PdfSharpCore.Drawing
     internal enum XImageState
     {
         UsedInDrawingContext = 0x00000001,
-
         StateMask = 0x0000FFFF,
     }
 
@@ -54,32 +53,14 @@ namespace PdfSharpCore.Drawing
     /// </summary>
     public class XImage : IDisposable
     {
-        // The hierarchy is adapted to WPF/Silverlight/WinRT
-        //
-        // XImage                           <-- ImageSource
-        //   XForm
-        //   PdfForm
-        //   XBitmapSource               <-- BitmapSource
-        //     XBitmapImage             <-- BitmapImage
-
-        // ???
-        //public bool Disposed
-        //{
-        //    get { return _disposed; }
-        //    set { _disposed = value; }
-        //}
-
-
         /// <summary>
         /// Initializes a new instance of the <see cref="XImage"/> class.
         /// </summary>
-        protected XImage()
-        { }
+        protected XImage() { }
 
-        // Useful stuff here: http://stackoverflow.com/questions/350027/setting-wpf-image-source-in-code
         XImage(string path)
         {
-            if (ImageSource.ImageSourceImpl == null) ImageSource.ImageSourceImpl = new ImageSharpImageSource<Rgba32>();
+            if (ImageSource.ImageSourceImpl == null) ImageSource.ImageSourceImpl = new MagickSharpImageSource();
             _source = ImageSource.FromFile(path);
             Initialize();
         }
@@ -95,8 +76,8 @@ namespace PdfSharpCore.Drawing
         {
             // Create a dummy unique path.
             _path = "*" + Guid.NewGuid().ToString("B");
-            if (ImageSource.ImageSourceImpl == null) 
-                ImageSource.ImageSourceImpl = new ImageSharpImageSource<Rgba32>();
+            if (ImageSource.ImageSourceImpl == null)
+                ImageSource.ImageSourceImpl = new MagickSharpImageSource();
             _source = ImageSource.FromStream(_path, stream);
             Initialize();
         }
@@ -109,24 +90,11 @@ namespace PdfSharpCore.Drawing
             Initialize();
         }
 
-        /// <summary>
-        /// Creates an image from the specified file.
-        /// For non-pdf files, this requires that an instance of an implementation of <see cref="T:MigraDocCore.DocumentObjectModel.MigraDoc.DocumentObjectModel.Shapes.ImageSource"/> be set on the `ImageSource.ImageSourceImpl` property.
-        /// For .NetCore apps, if this property is null at this point, then <see cref="T:PdfSharpCore.Utils.ImageSharpImageSource"/> with <see cref="T:SixLabors.ImageSharp.PixelFormats.Rgba32"/> Pixel Type is used
-        /// </summary>
-        /// <param name="path">The path to a BMP, PNG, GIF, JPEG, TIFF, or PDF file.</param>
         public static XImage FromFile(string path)
         {
             return FromFile(path, PdfReadAccuracy.Strict);
         }
 
-        /// <summary>
-        /// Creates an image from the specified file.
-        /// For non-pdf files, this requires that an instance of an implementation of <see cref="T:MigraDocCore.DocumentObjectModel.MigraDoc.DocumentObjectModel.Shapes.ImageSource"/> be set on the `ImageSource.ImageSourceImpl` property.
-        /// For .NetCore apps, if this property is null at this point, then <see cref="T:PdfSharpCore.Utils.ImageSharpImageSource"/> with <see cref="T:SixLabors.ImageSharp.PixelFormats.Rgba32"/> Pixel Type is used
-        /// </summary>
-        /// <param name="path">The path to a BMP, PNG, GIF, JPEG, TIFF, or PDF file.</param>
-        /// <param name="accuracy">Moderate allows for broken references when using a PDF file.</param>
         public static XImage FromFile(string path, PdfReadAccuracy accuracy)
         {
             if (PdfReader.TestPdfFile(path) > 0)
@@ -134,21 +102,11 @@ namespace PdfSharpCore.Drawing
             return new XImage(path);
         }
 
-        /// <summary>
-        /// Creates an image from the specified stream.<br/>
-        /// For non-pdf files, this requires that an instance of an implementation of <see cref="T:MigraDocCore.DocumentObjectModel.MigraDoc.DocumentObjectModel.Shapes.ImageSource"/> be set on the `ImageSource.ImageSourceImpl` property.
-        /// For .NetCore apps, if this property is null at this point, then <see cref="T:PdfSharpCore.Utils.ImageSharpImageSource"/> with <see cref="T:SixLabors.ImageSharp.PixelFormats.Rgba32"/> Pixel Type is used
-        /// Silverlight supports PNG and JPEF only.
-        /// </summary>
-        /// <param name="stream">The stream containing a BMP, PNG, GIF, JPEG, TIFF, or PDF file.</param>
         public static XImage FromStream(Func<Stream> stream)
         {
             if (stream == null)
                 throw new ArgumentNullException("stream");
 
-            // TODO: Check PDF stream.
-            //if (PdfReader.TestPdfFile(path) > 0)
-            //  return new XPdfForm(path);
             return new XImage(stream);
         }
 
@@ -157,16 +115,8 @@ namespace PdfSharpCore.Drawing
             return new XImage(imageSouce);
         }
 
-        /// <summary>
-        /// Tests if a file exist. Supports PDF files with page number suffix.
-        /// </summary>
-        /// <param name="path">The path to a BMP, PNG, GIF, JPEG, TIFF, or PDF file.</param>
         public static bool ExistsFile(string path)
         {
-            // Support for "base64:" pseudo protocol is a MigraDoc feature, currently completely implemented in MigraDoc files. TODO: Does support for "base64:" make sense for PDFsharp? Probably not as PDFsharp can handle images from streams.
-            //if (path.StartsWith("base64:")) // The Image is stored in the string here, so the file exists.
-            //    return true;
-
             if (PdfReader.TestPdfFile(path) > 0)
                 return true;
             return false;
@@ -183,7 +133,6 @@ namespace PdfSharpCore.Drawing
         {
             if (_source != null)
             {
-                //We always get a jpeg from an image source
                 _format = _source.Transparent ? XImageFormat.Png : XImageFormat.Jpeg;
             }
         }
@@ -204,18 +153,11 @@ namespace PdfSharpCore.Drawing
             return ms;
         }
 
-        /// <summary>
-        /// Under construction
-        /// </summary>
         public void Dispose()
         {
             Dispose(true);
-            //GC.SuppressFinalize(this);
         }
 
-        /// <summary>
-        /// Disposes underlying GDI+ object.
-        /// </summary>
         protected virtual void Dispose(bool disposing)
         {
             if (!_disposed)
@@ -223,9 +165,6 @@ namespace PdfSharpCore.Drawing
         }
         bool _disposed;
 
-        /// <summary>
-        /// Gets the width of the image in point.
-        /// </summary>
         public virtual double PointWidth
         {
             get
@@ -234,9 +173,6 @@ namespace PdfSharpCore.Drawing
             }
         }
 
-        /// <summary>
-        /// Gets the height of the image in point.
-        /// </summary>
         public virtual double PointHeight
         {
             get
@@ -245,9 +181,6 @@ namespace PdfSharpCore.Drawing
             }
         }
 
-        /// <summary>
-        /// Gets the width of the image in pixels.
-        /// </summary>
         public virtual int PixelWidth
         {
             get
@@ -256,9 +189,6 @@ namespace PdfSharpCore.Drawing
             }
         }
 
-        /// <summary>
-        /// Gets the height of the image in pixels.
-        /// </summary>
         public virtual int PixelHeight
         {
             get
@@ -267,17 +197,11 @@ namespace PdfSharpCore.Drawing
             }
         }
 
-        /// <summary>
-        /// Gets the size in point of the image.
-        /// </summary>
         public virtual XSize Size
         {
             get { return new XSize(PointWidth, PointHeight); }
         }
 
-        /// <summary>
-        /// Gets the horizontal resolution of the image.
-        /// </summary>
         public virtual double HorizontalResolution
         {
             get
@@ -286,9 +210,6 @@ namespace PdfSharpCore.Drawing
             }
         }
 
-        /// <summary>
-        /// Gets the vertical resolution of the image.
-        /// </summary>
         public virtual double VerticalResolution
         {
             get
@@ -297,9 +218,6 @@ namespace PdfSharpCore.Drawing
             }
         }
 
-        /// <summary>
-        /// Gets or sets a flag indicating whether image interpolation is to be performed. 
-        /// </summary>
         public virtual bool Interpolate
         {
             get { return _interpolate; }
@@ -307,9 +225,6 @@ namespace PdfSharpCore.Drawing
         }
         bool _interpolate = true;
 
-        /// <summary>
-        /// Gets the format of the image.
-        /// </summary>
         public XImageFormat Format
         {
             get { return _format; }
@@ -346,15 +261,8 @@ namespace PdfSharpCore.Drawing
         }
         XGraphics _associatedGraphics;
 
-        /// <summary>
-        /// If path starts with '*' the image is created from a stream and the path is a GUID.
-        /// </summary>
         internal string _path;
 
-        /// <summary>
-        /// Cache PdfImageTable.ImageSelector to speed up finding the right PdfImage
-        /// if this image is used more than once.
-        /// </summary>
         internal PdfImageTable.ImageSelector _selector;
         private IImageSource _source;
     }
